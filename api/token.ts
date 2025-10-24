@@ -17,26 +17,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Server not configured' });
     }
 
-    // Запуск агента в комнате
-    const response = await fetch('https://api.livekit.cloud/agents/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.LIVEKIT_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        agent_id: process.env.AGENT_ID,
-        room: roomName
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Agent start error:', data);
-    }
-
-    // Создание токена для клиента
     const at = new AccessToken(
       process.env.LIVEKIT_API_KEY,
       process.env.LIVEKIT_API_SECRET,
@@ -52,15 +32,16 @@ export default async function handler(req, res) {
       canSubscribe: true,
     });
 
-    const token = at.toJwt();
+    const token = await at.toJwt();
 
     return res.status(200).json({ 
       token,
-      room: roomName
+      room: roomName,
+      identity: participantName
     });
 
   } catch (error) {
-    console.error('Server error:', error);
+    console.error('Token generation error:', error);
     return res.status(500).json({ 
       error: error.message 
     });
