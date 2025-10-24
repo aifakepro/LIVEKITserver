@@ -1,5 +1,8 @@
 {
-     "dependencies": {
-       "livekit-server-sdk": "^2.0.0"
-     }
-   }
+  "name": "liveki-tserver",
+  "version": "1.0.0",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
