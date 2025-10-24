@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -27,8 +29,6 @@ export default async function handler(req, res) {
     console.log('Starting agent:', { agentId, roomName });
 
     // Создаем JWT токен для API авторизации
-    const crypto = require('crypto');
-    
     const header = {
       alg: 'HS256',
       typ: 'JWT'
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     const response = await fetch('https://api.livekit.cloud/v1/agent/dispatch/create_dispatch', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiToken}`, // JWT токен!
+        'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
