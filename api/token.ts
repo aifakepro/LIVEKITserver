@@ -1,74 +1,87 @@
-import { AccessToken } from 'livekit-server-sdk';
-
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req) {
-  // CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-  };
-
-  // Handle OPTIONS request
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return res.status(200).end();
   }
 
   try {
-    const url = new URL(req.url);
-    const roomName = url.searchParams.get('room') || process.env.ROOM || 'StopAIFake';
-    const participantName = url.searchParams.get('name') || `user_${Date.now()}`;
-
+    const roomName = req.query.room || 'StopAIFake';
+    const participantName = req.query.name || `user_${Date.now()}`;
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
 
     if (!apiKey || !apiSecret) {
-      return new Response(JSON.stringify({ 
-        error: 'Server not configured',
-        details: 'Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET'
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return res.status(500).json({ 
+        error: 'Missing credentials',
+        details: {
+          hasApiKey: !!apiKey,
+          hasApiSecret: !!apiSecret
+        }
       });
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: participantName,
-    });
+    console.log('Generating token:', { roomName, participantName });
 
-    at.addGrant({
-      room: roomName,
-      roomJoin: true,
-      canPublish: true,
-      canSubscribe: true,
-    });
+    // Создаем токен вручную (без библиотеки)
+    const header = {
+      alg: 'HS256',
+      typ: 'JWT'
+    };
 
-    const token = await at.toJwt();
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      exp: now + 86400, // 24 часа
+      iss: apiKey,
+      nbf: now,
+      sub: participantName,
+      video: {
+        room: roomName,
+        roomJoin: true,
+        canPublish: true,
+        canSubscribe: true
+      }
+    };
 
-    return new Response(JSON.stringify({ 
+    // Простое создание JWT
+    const encoder = new TextEncoder();
+    const base64url = (str) => {
+      return Buffer.from(str).toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const headerEncoded = base64url(JSON.stringify(header));
+    const payloadEncoded = base64url(JSON.stringify(payload));
+    const signatureInput = `${headerEncoded}.${payloadEncoded}`;
+
+    const crypto = require('crypto');
+    const signature = crypto
+      .createHmac('sha256', apiSecret)
+      .update(signatureInput)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    const token = `${signatureInput}.${signature}`;
+
+    console.log('Token generated successfully');
+
+    return res.status(200).json({ 
       token,
       room: roomName,
       identity: participantName
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Token generation error:', error);
-    return new Response(JSON.stringify({ 
+    console.error('Token error:', error);
+    return res.status(500).json({ 
       error: error.message,
       stack: error.stack
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
