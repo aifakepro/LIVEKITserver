@@ -13,31 +13,28 @@ export default async function handler(req, res) {
     const roomName = req.query.room || 'StopAIFake';
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
-    const agentId = process.env.AGENT_ID;
+    const agentName = process.env.AGENT_NAME || 'voice-agent'; // используем AGENT_NAME вместо AGENT_ID
 
-    if (!apiKey || !apiSecret || !agentId) {
+    if (!apiKey || !apiSecret || !agentName) {
       return res.status(500).json({ 
         error: 'Missing env variables',
         details: {
           hasApiKey: !!apiKey,
           hasApiSecret: !!apiSecret,
-          hasAgentId: !!agentId
+          hasAgentName: !!agentName
         }
       });
     }
 
-    console.log('Starting agent:', { agentId, roomName });
+    console.log('Starting agent:', { agentName, roomName });
 
-    // Создаем JWT токен для API авторизации
-    const header = {
-      alg: 'HS256',
-      typ: 'JWT'
-    };
-    
+    // Создаем JWT токен для API
+    const header = { alg: 'HS256', typ: 'JWT' };
     const now = Math.floor(Date.now() / 1000);
+    
     const payload = {
       iss: apiKey,
-      exp: now + 600, // 10 минут
+      exp: now + 600,
       nbf: now,
       video: {
         roomAdmin: true,
@@ -46,7 +43,8 @@ export default async function handler(req, res) {
     };
 
     const base64url = (str) => {
-      return Buffer.from(str).toString('base64')
+      return Buffer.from(str)
+        .toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=/g, '');
@@ -66,22 +64,33 @@ export default async function handler(req, res) {
     
     const apiToken = `${signatureInput}.${signature}`;
 
-    // Используем Bearer token с JWT
-    const response = await fetch('https://api.livekit.cloud/v1/agent/dispatch/create_dispatch', {
+    // Вызов API LiveKit
+    const apiUrl = 'https://api.livekit.cloud/v1/agent/dispatch/create_dispatch';
+    
+    console.log('Calling LiveKit API:', apiUrl);
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        agent_name: agentId,
+        agent_name: agentName,
         room: roomName,
-        metadata: JSON.stringify({ source: 'web-frontend' })
+        metadata: JSON.stringify({ 
+          source: 'web-frontend',
+          timestamp: new Date().toISOString()
+        })
       })
     });
 
     const responseText = await response.text();
-    console.log('API Response:', { status: response.status, body: responseText });
+    console.log('LiveKit API Response:', { 
+      status: response.status, 
+      statusText: response.statusText,
+      body: responseText.substring(0, 500)
+    });
 
     let data;
     try {
@@ -96,26 +105,28 @@ export default async function handler(req, res) {
     }
 
     if (!response.ok) {
-      console.error('Agent start failed:', data);
+      console.error('Agent dispatch failed:', data);
       return res.status(response.status).json({ 
-        error: 'Failed to start agent',
+        error: 'Failed to dispatch agent',
         status: response.status,
         details: data 
       });
     }
 
-    console.log('Agent started successfully:', data);
+    console.log('Agent dispatched successfully:', data);
+    
     return res.status(200).json({ 
       success: true,
       room: roomName,
-      agent: data
+      agent: data,
+      timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('Server error:', error);
     return res.status(500).json({ 
       error: error.message,
-      stack: error.stack
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }
