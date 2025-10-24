@@ -1,29 +1,47 @@
 import { AccessToken } from 'livekit-server-sdk';
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(req) {
+  // CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+
+  // Handle OPTIONS request
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
-    const roomName = req.query.room || process.env.ROOM || 'StopAIFake';
-    const participantName = req.query.name || `user_${Date.now()}`;
+    const url = new URL(req.url);
+    const roomName = url.searchParams.get('room') || process.env.ROOM || 'StopAIFake';
+    const participantName = url.searchParams.get('name') || `user_${Date.now()}`;
 
-    if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET) {
-      return res.status(500).json({ error: 'Server not configured' });
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+
+    if (!apiKey || !apiSecret) {
+      return new Response(JSON.stringify({ 
+        error: 'Server not configured',
+        details: 'Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const at = new AccessToken(
-      process.env.LIVEKIT_API_KEY,
-      process.env.LIVEKIT_API_SECRET,
-      {
-        identity: participantName,
-      }
-    );
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: participantName,
+    });
 
     at.addGrant({
       room: roomName,
@@ -34,16 +52,23 @@ export default async function handler(req, res) {
 
     const token = await at.toJwt();
 
-    return res.status(200).json({ 
+    return new Response(JSON.stringify({ 
       token,
       room: roomName,
       identity: participantName
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('Token generation error:', error);
-    return res.status(500).json({ 
-      error: error.message 
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      stack: error.stack
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
