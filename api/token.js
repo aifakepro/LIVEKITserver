@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -46,7 +48,6 @@ export default async function handler(req, res) {
     };
 
     // Простое создание JWT
-    const encoder = new TextEncoder();
     const base64url = (str) => {
       return Buffer.from(str).toString('base64')
         .replace(/\+/g, '-')
@@ -58,7 +59,6 @@ export default async function handler(req, res) {
     const payloadEncoded = base64url(JSON.stringify(payload));
     const signatureInput = `${headerEncoded}.${payloadEncoded}`;
 
-    const crypto = require('crypto');
     const signature = crypto
       .createHmac('sha256', apiSecret)
       .update(signatureInput)
