@@ -26,14 +26,51 @@ export default async function handler(req, res) {
 
     console.log('Starting agent:', { agentId, roomName });
 
-    // ИСПРАВЛЕНО: Правильный Basic Auth для LiveKit API
-    const authString = `${apiKey}:${apiSecret}`;
-    const base64Auth = Buffer.from(authString).toString('base64');
+    // Создаем JWT токен для API авторизации
+    const crypto = require('crypto');
+    
+    const header = {
+      alg: 'HS256',
+      typ: 'JWT'
+    };
+    
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: apiKey,
+      exp: now + 600, // 10 минут
+      nbf: now,
+      video: {
+        roomAdmin: true,
+        room: roomName
+      }
+    };
 
+    const base64url = (str) => {
+      return Buffer.from(str).toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const headerEncoded = base64url(JSON.stringify(header));
+    const payloadEncoded = base64url(JSON.stringify(payload));
+    const signatureInput = `${headerEncoded}.${payloadEncoded}`;
+    
+    const signature = crypto
+      .createHmac('sha256', apiSecret)
+      .update(signatureInput)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    
+    const apiToken = `${signatureInput}.${signature}`;
+
+    // Используем Bearer token с JWT
     const response = await fetch('https://api.livekit.cloud/v1/agent/dispatch/create_dispatch', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${base64Auth}`, // ← ЗДЕСЬ ИСПРАВЛЕНО!
+        'Authorization': `Bearer ${apiToken}`, // JWT токен!
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
