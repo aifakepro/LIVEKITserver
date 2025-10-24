@@ -1,85 +1,82 @@
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req) {
-  // CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-  };
-
-  // Handle OPTIONS request
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return res.status(200).end();
   }
 
   try {
-    const url = new URL(req.url);
-    const roomName = url.searchParams.get('room') || process.env.ROOM || 'StopAIFake';
-
+    const roomName = req.query.room || 'StopAIFake';
     const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
     const agentId = process.env.AGENT_ID;
 
-    if (!apiKey || !agentId) {
-      return new Response(JSON.stringify({ 
-        error: 'Server not configured',
-        details: 'Missing LIVEKIT_API_KEY or AGENT_ID' 
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (!apiKey || !apiSecret || !agentId) {
+      return res.status(500).json({ 
+        error: 'Missing env variables',
+        details: {
+          hasApiKey: !!apiKey,
+          hasApiSecret: !!apiSecret,
+          hasAgentId: !!agentId
+        }
       });
     }
 
-    // Запуск агента
-    const response = await fetch('https://api.livekit.cloud/agents/dispatch', {
+    console.log('Starting agent:', { agentId, roomName });
+
+    // Правильный эндпоинт для запуска агента
+    const response = await fetch('https://api.livekit.cloud/v1/agent/dispatch/create_dispatch', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${apiKey}:${apiSecret}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         agent_name: agentId,
-        room: roomName
+        room: roomName,
+        metadata: JSON.stringify({ source: 'web-frontend' })
       })
     });
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('Agent start error:', data);
-      return new Response(JSON.stringify({ 
-        error: 'Failed to start agent',
+    const responseText = await response.text();
+    console.log('API Response:', { status: response.status, body: responseText });
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error('Failed to parse response:', responseText);
+      return res.status(response.status).json({
+        error: 'Invalid API response',
         status: response.status,
-        details: data 
-      }), {
-        status: response.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: responseText
       });
     }
 
-    return new Response(JSON.stringify({ 
+    if (!response.ok) {
+      console.error('Agent start failed:', data);
+      return res.status(response.status).json({ 
+        error: 'Failed to start agent',
+        status: response.status,
+        details: data 
+      });
+    }
+
+    console.log('Agent started successfully:', data);
+
+    return res.status(200).json({ 
       success: true,
       room: roomName,
       agent: data
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('Server error:', error);
-    return new Response(JSON.stringify({ 
+    return res.status(500).json({ 
       error: error.message,
       stack: error.stack
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
