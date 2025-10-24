@@ -26,11 +26,14 @@ export default async function handler(req, res) {
 
     console.log('Starting agent:', { agentId, roomName });
 
-    // Правильный эндпоинт для запуска агента
+    // ИСПРАВЛЕНО: Правильный Basic Auth для LiveKit API
+    const authString = `${apiKey}:${apiSecret}`;
+    const base64Auth = Buffer.from(authString).toString('base64');
+
     const response = await fetch('https://api.livekit.cloud/v1/agent/dispatch/create_dispatch', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}:${apiSecret}`,
+        'Authorization': `Basic ${base64Auth}`, // ← ЗДЕСЬ ИСПРАВЛЕНО!
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -65,7 +68,6 @@ export default async function handler(req, res) {
     }
 
     console.log('Agent started successfully:', data);
-
     return res.status(200).json({ 
       success: true,
       room: roomName,
