@@ -40,11 +40,12 @@ export default async function handler(req, res) {
       nbf: now,
       sub: participantName,
       video: {
-        room: roomName,
-        roomJoin: true,
-        canPublish: true,
-        canSubscribe: true
-      }
+  room: roomName,
+  roomJoin: true,
+  canPublish: true,
+  canSubscribe: true,
+  canPublishData: true
+}
     };
 
     // Простое создание JWT
